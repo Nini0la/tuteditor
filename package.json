@@ -1,0 +1,10 @@
+{
+  "name": "tuteditor-ui-tests",
+  "private": true,
+  "devDependencies": {
+    "@playwright/test": "^1.58.2"
+  },
+  "scripts": {
+    "test:ui": "RUN_UI_TESTS=1 playwright test tests/ui/test_workspace_interactions.spec.ts"
+  }
+}
