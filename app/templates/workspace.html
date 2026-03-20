@@ -7,6 +7,11 @@
     <link rel="stylesheet" href="/static/css/workspace.css" />
   </head>
   <body data-session-id="{{ session_id }}">
+    <div id="error-banner" class="error-banner" hidden>
+      <p id="error-message" class="error-message"></p>
+      <button id="retry-last-action" type="button">Retry</button>
+    </div>
+
     <main class="layout">
       <section class="panel" data-testid="task-context-panel">
         <h2>Task Context</h2>
@@ -35,6 +40,23 @@
 
       <section class="panel">
         <h2>Threads</h2>
+        <form id="thread-form">
+          <label>
+            Thread Name
+            <input id="thread-title" name="thread_title" />
+          </label>
+          <label>
+            Thread Type
+            <select id="thread-type" name="thread_type">
+              <option value="general">general</option>
+              <option value="hinting">hinting</option>
+              <option value="concept">concept</option>
+              <option value="planning">planning</option>
+              <option value="reflection">reflection</option>
+            </select>
+          </label>
+          <button id="create-thread" type="submit">Create Thread</button>
+        </form>
         <div id="thread-list"></div>
         <div id="message-list"></div>
         <label>

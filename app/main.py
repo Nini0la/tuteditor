@@ -2,14 +2,16 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from sqlalchemy import text
+from sqlmodel import Session
 
 from app.api.router import api_router
 from app.config import settings
-from app.deps import get_store
+from app.deps import get_db, get_store
 from app.store import StoreError
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -22,7 +24,8 @@ templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
 
 @app.get("/health")
-def health() -> dict[str, str]:
+def health(db: Session = Depends(get_db)) -> dict[str, str]:
+    db.exec(text("SELECT 1"))
     return {"status": "ok"}
 
 

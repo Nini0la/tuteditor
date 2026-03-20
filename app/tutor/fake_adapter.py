@@ -2,9 +2,11 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.tutor.types import TutorOutput
+
 
 class FakeTutorAdapter:
-    def generate_nudge(self, payload: dict[str, Any]) -> dict[str, Any]:
+    def generate_nudge(self, payload: dict[str, Any]) -> TutorOutput:
         request_type = payload.get("event", {}).get("request_type", "stuck")
         summary = "You have started structuring your solution."
         next_step = "Focus on one small invariant and verify it with a quick test case."

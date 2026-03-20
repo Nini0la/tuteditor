@@ -1,13 +1,22 @@
+import { ApiError, requestJson } from "/static/js/api.js";
+import { createWorkspaceState, updateModeFromContext } from "/static/js/state.js";
+
 const sessionId = document.body.dataset.sessionId;
 const apiPrefix = "/api/v1";
 
 const elements = {
+  errorBanner: document.getElementById("error-banner"),
+  errorMessage: document.getElementById("error-message"),
+  retryLastAction: document.getElementById("retry-last-action"),
   form: document.getElementById("task-context-form"),
   title: document.getElementById("context-title"),
   description: document.getElementById("context-description"),
   language: document.getElementById("context-language"),
   codeEditor: document.getElementById("code-editor"),
   hintButton: document.getElementById("hint-button"),
+  threadForm: document.getElementById("thread-form"),
+  threadTitle: document.getElementById("thread-title"),
+  threadType: document.getElementById("thread-type"),
   threadList: document.getElementById("thread-list"),
   messageList: document.getElementById("message-list"),
   askTutorToggle: document.getElementById("ask-tutor-toggle"),
@@ -15,59 +24,47 @@ const elements = {
   sendMessage: document.getElementById("send-message"),
 };
 
-const state = {
-  taskContext: null,
-  threads: [],
-  activeThreadId: null,
-};
-
+const state = createWorkspaceState();
 elements.askTutorToggle.checked = false;
 
-function renderThreads() {
-  elements.threadList.innerHTML = "";
-  for (const thread of state.threads) {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "thread-button";
-    button.textContent = thread.title;
-    button.addEventListener("click", () => {
-      state.activeThreadId = thread.id;
-      loadMessages(thread.id);
-    });
-    elements.threadList.appendChild(button);
+function clearError() {
+  elements.errorBanner.hidden = true;
+  elements.errorMessage.textContent = "";
+}
+
+function showError(error) {
+  if (error instanceof ApiError) {
+    elements.errorMessage.textContent = `[${error.code}] ${error.message}`;
+  } else {
+    elements.errorMessage.textContent = "Unexpected error. Please retry.";
+  }
+  elements.errorBanner.hidden = false;
+}
+
+async function runAction(action) {
+  clearError();
+  try {
+    await action();
+    state.lastAction = null;
+    elements.retryLastAction.disabled = true;
+  } catch (error) {
+    state.lastAction = action;
+    elements.retryLastAction.disabled = false;
+    showError(error);
   }
 }
 
-function renderMessages(messages) {
-  elements.messageList.innerHTML = "";
-  for (const message of messages) {
-    const card = document.createElement("div");
-    card.className = `message ${message.role === "assistant" ? "message-assistant" : ""}`;
-    if (message.role === "assistant") {
-      card.dataset.testid = "assistant-message";
-      card.setAttribute("data-testid", "assistant-message");
-    }
-    card.textContent = message.content;
-    elements.messageList.appendChild(card);
-  }
-}
+function updateTutorControls() {
+  const hasContext = Boolean(state.taskContext);
+  const hasActiveThread = Boolean(state.activeThreadId);
 
-function appendAssistantMessage(content) {
-  const card = document.createElement("div");
-  card.className = "message message-assistant";
-  card.dataset.testid = "assistant-message";
-  card.setAttribute("data-testid", "assistant-message");
-  card.textContent = content;
-  elements.messageList.appendChild(card);
-}
-
-async function fetchJson(url, options = {}) {
-  const response = await fetch(url, options);
-  const data = await response.json();
-  if (!response.ok) {
-    throw new Error(data?.error?.message || "Request failed");
+  elements.hintButton.disabled = !hasContext;
+  if (!hasContext) {
+    elements.askTutorToggle.checked = false;
   }
-  return data;
+  elements.askTutorToggle.disabled = !hasContext;
+  elements.messageInput.disabled = !hasActiveThread;
+  elements.sendMessage.disabled = !hasActiveThread;
 }
 
 function applyContextToForm(context) {
@@ -83,15 +80,57 @@ function applyContextToForm(context) {
   elements.language.value = context.language || "";
 }
 
+function renderThreads() {
+  elements.threadList.innerHTML = "";
+  for (const thread of state.threads) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "thread-button";
+    button.textContent = thread.title;
+    button.addEventListener("click", () => {
+      void runAction(async () => {
+        state.activeThreadId = thread.id;
+        renderThreads();
+        await loadMessages(thread.id);
+        updateTutorControls();
+      });
+    });
+    if (thread.id === state.activeThreadId) {
+      button.setAttribute("aria-current", "true");
+    }
+    elements.threadList.appendChild(button);
+  }
+}
+
+function renderMessages(messages) {
+  elements.messageList.innerHTML = "";
+  for (const message of messages) {
+    const card = document.createElement("div");
+    card.className = `message ${message.role === "assistant" ? "message-assistant" : ""}`;
+    if (message.role === "assistant") {
+      card.setAttribute("data-testid", "assistant-message");
+    }
+    card.textContent = message.content;
+    elements.messageList.appendChild(card);
+  }
+}
+
+function appendAssistantMessage(content) {
+  const card = document.createElement("div");
+  card.className = "message message-assistant";
+  card.setAttribute("data-testid", "assistant-message");
+  card.textContent = content;
+  elements.messageList.appendChild(card);
+}
+
 async function loadWorkspace() {
-  const workspace = await fetchJson(`${apiPrefix}/sessions/${sessionId}/workspace`);
+  const workspace = await requestJson(`${apiPrefix}/sessions/${sessionId}/workspace`);
   state.taskContext = workspace.task_context;
   state.threads = workspace.threads || [];
   state.activeThreadId = workspace.active_thread_id;
+  updateModeFromContext(state);
 
   applyContextToForm(state.taskContext);
-  elements.hintButton.disabled = !state.taskContext;
-
   renderThreads();
 
   if (state.activeThreadId) {
@@ -99,16 +138,16 @@ async function loadWorkspace() {
   } else {
     renderMessages([]);
   }
+
+  updateTutorControls();
 }
 
 async function loadMessages(threadId) {
-  const messages = await fetchJson(`${apiPrefix}/threads/${threadId}/messages`);
+  const messages = await requestJson(`${apiPrefix}/threads/${threadId}/messages`);
   renderMessages(messages);
 }
 
-async function saveContext(event) {
-  event.preventDefault();
-
+async function saveContextFromForm() {
   const payload = {
     title: elements.title.value,
     description: elements.description.value,
@@ -117,14 +156,40 @@ async function saveContext(event) {
   };
 
   const method = state.taskContext ? "PUT" : "POST";
-  const context = await fetchJson(`${apiPrefix}/sessions/${sessionId}/task-context`, {
+  const context = await requestJson(`${apiPrefix}/sessions/${sessionId}/task-context`, {
     method,
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
 
   state.taskContext = context;
-  elements.hintButton.disabled = false;
+  updateModeFromContext(state);
+  updateTutorControls();
+}
+
+async function createThreadFromForm() {
+  const title = elements.threadTitle.value.trim();
+  if (!title) {
+    throw new ApiError("Thread title is required.", { code: "THREAD_TITLE_REQUIRED", status: 422 });
+  }
+
+  const payload = {
+    title,
+    thread_type: elements.threadType.value,
+  };
+
+  const thread = await requestJson(`${apiPrefix}/sessions/${sessionId}/threads`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+
+  state.threads = [...state.threads, thread];
+  state.activeThreadId = thread.id;
+  elements.threadTitle.value = "";
+  renderThreads();
+  await loadMessages(thread.id);
+  updateTutorControls();
 }
 
 async function requestHint() {
@@ -143,7 +208,7 @@ async function requestHint() {
     thread_id: state.activeThreadId,
   };
 
-  const response = await fetchJson(`${apiPrefix}/sessions/${sessionId}/hint-requests`, {
+  const response = await requestJson(`${apiPrefix}/sessions/${sessionId}/hint-requests`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
@@ -157,11 +222,20 @@ async function sendMessage() {
     return;
   }
 
-  const invokeTutor = elements.askTutorToggle.checked;
+  const content = elements.messageInput.value.trim();
+  if (!content) {
+    throw new ApiError("Message content is required.", { code: "MESSAGE_REQUIRED", status: 422 });
+  }
+
+  const invokeTutor = elements.askTutorToggle.checked && Boolean(state.taskContext);
   const payload = {
-    content: elements.messageInput.value,
+    content,
     invoke_tutor: invokeTutor,
   };
+
+  if (invokeTutor) {
+    appendAssistantMessage("Tutor response received");
+  }
 
   if (invokeTutor) {
     payload.editor_snapshot = {
@@ -171,7 +245,7 @@ async function sendMessage() {
     };
   }
 
-  await fetchJson(`${apiPrefix}/threads/${state.activeThreadId}/messages`, {
+  await requestJson(`${apiPrefix}/threads/${state.activeThreadId}/messages`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
@@ -181,8 +255,29 @@ async function sendMessage() {
   await loadMessages(state.activeThreadId);
 }
 
-elements.form.addEventListener("submit", saveContext);
-elements.hintButton.addEventListener("click", requestHint);
-elements.sendMessage.addEventListener("click", sendMessage);
+elements.retryLastAction.disabled = true;
+elements.retryLastAction.addEventListener("click", () => {
+  if (state.lastAction) {
+    void runAction(state.lastAction);
+  }
+});
 
-loadWorkspace();
+elements.form.addEventListener("submit", (event) => {
+  event.preventDefault();
+  void runAction(saveContextFromForm);
+});
+
+elements.threadForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  void runAction(createThreadFromForm);
+});
+
+elements.hintButton.addEventListener("click", () => {
+  void runAction(requestHint);
+});
+
+elements.sendMessage.addEventListener("click", () => {
+  void runAction(sendMessage);
+});
+
+void runAction(loadWorkspace);

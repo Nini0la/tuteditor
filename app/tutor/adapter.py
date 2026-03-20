@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from typing import Any, Protocol
 
+from app.tutor.types import TutorOutput
+
 
 class TutorAdapter(Protocol):
-    def generate_nudge(self, payload: dict[str, Any]) -> dict[str, Any]:
+    def generate_nudge(self, payload: dict[str, Any]) -> TutorOutput:
         ...
