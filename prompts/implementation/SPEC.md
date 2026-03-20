@@ -2,7 +2,8 @@
 
 ## 1. Scope
 MVP delivers one web workspace page where users:
-- declare task context first,
+- create a session,
+- provide task context before requesting tutoring,
 - edit code,
 - use parallel side conversations,
 - explicitly trigger tutoring via:
@@ -114,31 +115,44 @@ Base path: `/api/v1`
 ## 4.1 Session + Task Context
 
 ### `POST /sessions`
-Create session and required task context in one call.
+Create session only.
 
 Request:
 ```json
-{
-  "task_context": {
-    "title": "Binary search exercise",
-    "description": "Implement iterative binary search over sorted ints",
-    "language": "python",
-    "desired_help_style": "hint_first"
-  }
-}
+{}
 ```
 
 Response `201`:
 ```json
 {
   "session_id": "uuid",
-  "task_context_id": "uuid",
   "workspace_url": "/workspace/uuid"
 }
 ```
 
+### `POST /sessions/{session_id}/task-context`
+Create the first active task context for an existing session.
+
+Request:
+```json
+{
+  "title": "Binary search exercise",
+  "description": "Implement iterative binary search over sorted ints",
+  "language": "python",
+  "desired_help_style": "hint_first"
+}
+```
+
+Response `201`:
+```json
+{
+  "task_context_id": "uuid"
+}
+```
+
 Validation:
-- `task_context` required for initial active context.
+- session must exist.
+- request must include valid task context fields.
 
 ### `PUT /sessions/{session_id}/task-context`
 Update active context by creating a new task context version and marking prior active context inactive.
@@ -288,7 +302,7 @@ Response `201`:
 ```
 
 Validation:
-- Reject with `409` if session has no task context.
+- Reject with `409` if session has no active task context.
 
 ## 4.7 Error Contract
 All non-2xx responses:
