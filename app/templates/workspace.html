@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>TutEditor Workspace</title>
+    <link rel="stylesheet" href="/static/css/workspace.css" />
+  </head>
+  <body data-session-id="{{ session_id }}">
+    <main class="layout">
+      <section class="panel" data-testid="task-context-panel">
+        <h2>Task Context</h2>
+        <form id="task-context-form">
+          <label>
+            Title
+            <input id="context-title" name="title" />
+          </label>
+          <label>
+            Description
+            <textarea id="context-description" name="description"></textarea>
+          </label>
+          <label>
+            Language
+            <input id="context-language" name="language" />
+          </label>
+          <button type="submit">Save</button>
+        </form>
+      </section>
+
+      <section class="panel">
+        <h2>Editor</h2>
+        <textarea data-testid="code-editor" id="code-editor" rows="12"></textarea>
+        <button id="hint-button" type="button">Hint / I'm getting stuck</button>
+      </section>
+
+      <section class="panel">
+        <h2>Threads</h2>
+        <div id="thread-list"></div>
+        <div id="message-list"></div>
+        <label>
+          Ask tutor
+          <input type="checkbox" data-testid="ask-tutor-toggle" id="ask-tutor-toggle" />
+        </label>
+        <input data-testid="thread-message-input" id="thread-message-input" />
+        <button id="send-message" type="button">Send</button>
+      </section>
+    </main>
+
+    <script type="module" src="/static/js/workspace.js"></script>
+  </body>
+</html>
