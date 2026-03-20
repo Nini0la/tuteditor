@@ -21,7 +21,7 @@ Tutor inference is event-driven only. No continuous monitoring.
 ## 3. Data Model
 
 ## 3.1 Entity Relationship Summary
-- `Session` 1:1 `TaskContext` (MVP: one active context per session)
+- `Session` 1:N `TaskContext` (MVP: one active context, editable over time)
 - `Session` 1:N `CodeSnapshot`
 - `Session` 1:N `ConversationThread`
 - `ConversationThread` 1:N `ConversationMessage`
@@ -38,24 +38,14 @@ Tutor inference is event-driven only. No continuous monitoring.
 
 ### `task_contexts`
 - `id` (uuid, pk)
-- `session_id` (uuid, unique, fk `sessions.id`)
+- `session_id` (uuid, fk `sessions.id`, indexed)
 - `title` (text, not null)
 - `description` (text, not null)
-- `task_type` (text, not null)
 - `language` (text, not null)
 - `desired_help_style` (text, not null, default `hint_first`)
+- `is_active` (bool, not null, default true)
 - `created_at` (datetime, not null)
 - `updated_at` (datetime, not null)
-
-Allowed `task_type` (MVP enum):
-- `coding_exercise`
-- `debugging`
-- `ml_implementation`
-- `model_training`
-- `data_pipeline`
-- `algorithm_practice`
-- `refactor`
-- `concept_learning`
 
 ### `code_snapshots`
 - `id` (uuid, pk)
@@ -73,14 +63,13 @@ Allowed `task_type` (MVP enum):
 - `session_id` (uuid, fk `sessions.id`, indexed)
 - `title` (text, not null)
 - `thread_type` (text, not null, default `general`)
-- `linked_task_context_id` (uuid, fk `task_contexts.id`, nullable)
+- `linked_task_context_id` (uuid, fk `task_contexts.id`, nullable, usually latest active context)
 - `created_at` (datetime, not null)
 
 Allowed `thread_type` (MVP enum):
 - `general`
 - `hinting`
-- `debugging`
-- `theory`
+- `concept`
 - `planning`
 - `reflection`
 
@@ -106,7 +95,6 @@ Allowed `thread_type` (MVP enum):
 Allowed `request_type` (MVP enum):
 - `stuck`
 - `next_step`
-- `explain_error`
 - `review_approach`
 - `stronger_hint`
 
@@ -134,7 +122,6 @@ Request:
   "task_context": {
     "title": "Binary search exercise",
     "description": "Implement iterative binary search over sorted ints",
-    "task_type": "coding_exercise",
     "language": "python",
     "desired_help_style": "hint_first"
   }
@@ -151,12 +138,27 @@ Response `201`:
 ```
 
 Validation:
-- `task_context` required.
+- `task_context` required for initial active context.
 
 ### `PUT /sessions/{session_id}/task-context`
-Update declared context.
+Update active context by creating a new task context version and marking prior active context inactive.
 
-Response `200`: updated task context object.
+Request:
+```json
+{
+  "title": "Add preprocessing to the ML pipeline",
+  "description": "Continue from previous pipeline and now add scaling + split",
+  "language": "python",
+  "desired_help_style": "hint_first"
+}
+```
+
+Behavior:
+- prior active task context becomes `is_active=false`
+- new task context becomes `is_active=true`
+- tutor uses latest active context only
+
+Response `200`: new active task context object.
 
 ## 4.2 Workspace State
 
@@ -168,6 +170,7 @@ Response `200`:
 {
   "session": {"id": "uuid", "status": "active"},
   "task_context": {...},
+  "task_context_history": [...],
   "latest_snapshot": {...},
   "threads": [...],
   "active_thread_id": "uuid|null"
@@ -207,8 +210,8 @@ Create side thread.
 Request:
 ```json
 {
-  "title": "Why this loop fails",
-  "thread_type": "debugging"
+  "title": "Loop reasoning",
+  "thread_type": "concept"
 }
 ```
 
@@ -228,16 +231,12 @@ Submit user message; optionally invoke tutor.
 Request:
 ```json
 {
-  "content": "What should I test next?",
+  "content": "What logical step am I missing?",
   "invoke_tutor": true,
   "editor_snapshot": {
     "content": "def train(...):\n    ...",
     "cursor_line": 42,
     "cursor_col": 5
-  },
-  "runtime_feedback": {
-    "kind": "traceback",
-    "content": "ValueError: shapes not aligned"
   }
 }
 ```
@@ -272,11 +271,7 @@ Request:
     "cursor_line": 18,
     "cursor_col": 3
   },
-  "thread_id": "uuid|null",
-  "runtime_feedback": {
-    "kind": "lint",
-    "content": "F821 undefined name 'midpoint'"
-  }
+  "thread_id": "uuid|null"
 }
 ```
 
@@ -318,9 +313,9 @@ type WorkspaceState = {
       id: string;
       title: string;
       description: string;
-      taskType: string;
       language: string;
       desiredHelpStyle: string;
+      isActive: boolean;
     };
   };
   editor: {
@@ -351,6 +346,7 @@ type WorkspaceState = {
 - On first load without context:
   - show context form modal/panel,
   - disable hint button and tutor-invoking thread submit.
+- Task context can be edited during a session; latest saved version becomes active.
 - `Hint / I'm getting stuck`:
   - snapshot editor,
   - call hint-request endpoint,
@@ -377,7 +373,6 @@ Used by backend tutor orchestrator for explicit events only.
   "task_context": {
     "title": "string",
     "description": "string",
-    "task_type": "coding_exercise",
     "language": "python",
     "desired_help_style": "hint_first"
   },
@@ -390,12 +385,8 @@ Used by backend tutor orchestrator for explicit events only.
       {"kind": "insert", "line": 10, "text": "while low <= high:"}
     ]
   },
-  "runtime_feedback": {
-    "kind": "traceback|lint|test|null",
-    "content": "string|null"
-  },
   "thread_context": {
-    "thread_type": "debugging",
+    "thread_type": "concept",
     "recent_messages": [
       {"role": "user", "content": "string"},
       {"role": "assistant", "content": "string"}
@@ -415,8 +406,8 @@ Used by backend tutor orchestrator for explicit events only.
   "next_step_nudge": "Small actionable next step, no full solution",
   "assumption_to_check": "Potential misconception or invariant to verify",
   "optional_checks": [
-    "Run this specific small test",
-    "Inspect variable X at line Y"
+    "Check whether your stopping condition matches your intent",
+    "Consider the missing edge case before the next line"
   ],
   "safety": {
     "gave_full_solution": false
@@ -425,16 +416,16 @@ Used by backend tutor orchestrator for explicit events only.
 ```
 
 Output guardrails:
-- Must not provide full final code for exercise-style tasks.
+- Must not provide full final code.
 - Must reference user context/code state.
 - Must remain concise and actionable.
 
 ## 7. Acceptance Criteria
 - User cannot trigger tutor until task context exists.
+- Updating task context makes the new version active for subsequent tutor calls.
 - Multiple threads can be created and used independently.
 - Tutor calls occur only on:
   - hint button request,
   - thread message submit with `invoke_tutor=true`.
 - Tutor response is persisted and visible in workspace thread UI.
 - No background/interval inference path exists in code.
-

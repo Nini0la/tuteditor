@@ -7,20 +7,20 @@ Build a web-only, Python-first TutEditor MVP centered on one workspace page wher
 - runs parallel side conversations,
 - and explicitly triggers tutoring (hint button or side-thread submit).
 
-## Hard Constraints
 - Web app only.
 - Task context is required before tutoring.
 - Parallel side conversations are first-class.
 - No continuous monitoring or auto-intervention.
 - Single workspace page for MVP.
 - Python-first implementation.
+- No autocomplete or assistive completion in MVP.
 
 ## Architecture Direction (MVP)
 - Backend: FastAPI + SQLite + SQLModel (or SQLAlchemy + Pydantic).
 - Frontend: Single HTML workspace with JS modules and CSS (no heavy SPA framework required for MVP).
 - LLM layer: Python service adapter called only on explicit events.
 - Storage:
-  - session + task context,
+  - session + editable task context history,
   - editor snapshots/recent edits,
   - conversation threads/messages,
   - hint requests and tutor responses.
@@ -54,7 +54,8 @@ Exit criteria:
 
 ### Phase 2: API Contracts
 - Implement REST endpoints for:
-  - session + task context bootstrap,
+  - session + initial task context bootstrap,
+  - task context update (new active version),
   - editor snapshot updates,
   - thread creation/listing,
   - side-thread message submit (explicit tutor trigger path),
@@ -64,14 +65,14 @@ Exit criteria:
 
 Exit criteria:
 - Endpoints match `SPEC.md`.
+- Active task context switching works correctly.
 - Integration tests pass for happy path and guardrails.
 
 ### Phase 3: Tutor Orchestration
 - Build prompt payload composer from:
   - task context,
   - latest code + recent edits,
-  - relevant thread context,
-  - optional runtime/test error info.
+  - relevant thread context.
 - Build tutor response parser and persistence.
 - Add strict invocation policy: explicit trigger only.
 
@@ -81,8 +82,8 @@ Exit criteria:
 
 ### Phase 4: Single Workspace UI
 - Build one page with:
-  - task context panel,
-  - code editor area,
+  - editable task context panel (latest active context visible),
+  - minimal code editor area (assistive completions disabled),
   - parallel conversation sidebar,
   - explicit hint button,
   - tutor response cards.
@@ -111,7 +112,7 @@ Exit criteria:
 ## Definition of Done
 - A user can:
   1. Open workspace.
-  2. Provide task context.
+  2. Provide task context and optionally update it later.
   3. Write/update code.
   4. Create/use multiple side threads.
   5. Click `Hint / I'm getting stuck` or submit a thread message.

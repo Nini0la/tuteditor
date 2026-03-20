@@ -82,15 +82,16 @@ Ordered for dependency safety. Each ticket should be completed and committed bef
   - schema import tests pass.
 
 ## T007 - Session + Context APIs
-- Goal: Implement context-first session creation and update.
+- Goal: Implement session creation first, with editable task context managed separately.
 - Files:
   - `app/api/session_routes.py`
   - `app/services/session_service.py`
 - Endpoints:
   - `POST /api/v1/sessions`
+  - `POST /api/v1/sessions/{session_id}/task-context`
   - `PUT /api/v1/sessions/{session_id}/task-context`
 - Done when:
-  - create session returns ids and workspace URL.
+  - create session returns ids and workspace URL; task context can be added later and updated repeatedly.
 
 ## T008 - Workspace Aggregate API
 - Goal: Load all state for single-page boot.
@@ -100,7 +101,7 @@ Ordered for dependency safety. Each ticket should be completed and committed bef
 - Endpoint:
   - `GET /api/v1/sessions/{session_id}/workspace`
 - Done when:
-  - response includes session, context, latest snapshot, threads.
+  - response includes session, latest active task context, task context history metadata, latest snapshot, and threads.
 
 ## T009 - Snapshot API
 - Goal: Persist editor snapshots.
@@ -122,7 +123,7 @@ Ordered for dependency safety. Each ticket should be completed and committed bef
   - `GET /api/v1/sessions/{session_id}/threads`
   - `GET /api/v1/threads/{thread_id}/messages`
 - Done when:
-  - multiple thread types can be created and listed.
+  - multiple threads can be created and listed.
 
 ## T011 - Tutor Adapter Interface
 - Goal: Isolate LLM provider details behind service abstraction.
@@ -144,7 +145,6 @@ Ordered for dependency safety. Each ticket should be completed and committed bef
   - implement input schema assembly from:
     - task context,
     - latest snapshot + recent edits,
-    - optional runtime feedback,
     - selected thread context.
 - Done when:
   - unit tests validate schema shape.
@@ -157,7 +157,8 @@ Ordered for dependency safety. Each ticket should be completed and committed bef
 - Endpoint:
   - `POST /api/v1/sessions/{session_id}/hint-requests`
 - Behavior:
-  - require task context,
+  - require an active task context version,
+  - use latest task context if multiple versions exist,
   - persist snapshot,
   - create hint request,
   - call tutor adapter,
@@ -216,15 +217,16 @@ Ordered for dependency safety. Each ticket should be completed and committed bef
   - user actions update UI consistently.
 
 ## T018 - Task Context Form Flow
-- Goal: Enforce context-first experience.
+- Goal: Enforce context-required tutor use while allowing context edits during session.
 - Files:
   - `app/static/js/workspace.js`
   - `app/templates/workspace.html`
 - Changes:
   - block tutor triggers until context exists.
-  - submit/update context via API.
+  - allow creating first context after session creation.
+  - allow editing current context via API without losing prior versions.
 - Done when:
-  - hint and tutor-invoking submit are disabled without context.
+  - hint and tutor-invoking submit are disabled without context, but context can be edited anytime after creation.
 
 ## T019 - Parallel Threads UI Flow
 - Goal: Fully support multiple side threads.
@@ -241,7 +243,7 @@ Ordered for dependency safety. Each ticket should be completed and committed bef
 - Files:
   - `app/static/js/workspace.js`
 - Changes:
-  - capture editor snapshot and optional runtime text.
+  - capture editor snapshot only.
   - call hint endpoint and render response card.
 - Done when:
   - click produces persisted tutor message.
@@ -251,7 +253,7 @@ Ordered for dependency safety. Each ticket should be completed and committed bef
 - Files:
   - `app/static/js/workspace.js`
 - Changes:
-  - submit message with `invoke_tutor` toggle.
+  - submit message with optional `invoke_tutor` toggle.
   - render assistant response when invoked.
 - Done when:
   - submit can either chat-only or chat+hint depending on toggle.
@@ -276,6 +278,8 @@ Ordered for dependency safety. Each ticket should be completed and committed bef
   - `tests/test_trigger_policy.py`
 - Coverage:
   - context required,
+  - context version update preserves history,
+  - latest context is used by tutor payload,
   - explicit triggers only,
   - parallel threads,
   - hint persistence.
@@ -298,4 +302,3 @@ Ordered for dependency safety. Each ticket should be completed and committed bef
 - Commit C: T011-T015
 - Commit D: T016-T021
 - Commit E: T022-T024
-
