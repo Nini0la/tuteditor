@@ -30,6 +30,26 @@ uv run uvicorn app.main:app --reload
 Open:
 - `http://127.0.0.1:8000/workspace/<session_id>`
 
+## Tutor Adapter Configuration
+
+Default adapter is fake (deterministic; used by tests).
+
+Enable Mozilla.ai any-llm:
+
+```bash
+export TUTEDITOR_TUTOR_ADAPTER=any_llm
+export TUTEDITOR_ANY_LLM_PROVIDER=openai
+export TUTEDITOR_ANY_LLM_MODEL=gpt-4.1-mini
+```
+
+Optional overrides:
+- `TUTEDITOR_ANY_LLM_MAX_TOKENS` (default `300`)
+- `TUTEDITOR_ANY_LLM_TEMPERATURE` (default `0.2`)
+- `TUTEDITOR_ANY_LLM_API_KEY` (optional direct key override)
+- `TUTEDITOR_ANY_LLM_API_BASE` (optional direct base URL override)
+
+Provider credentials are still read using any-llm/provider env vars (for example `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `MISTRAL_API_KEY`).
+
 ## Run Tests
 
 API/unit:
